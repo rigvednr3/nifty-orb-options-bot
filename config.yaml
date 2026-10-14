@@ -1,0 +1,82 @@
+# ─────────────────────────────────────────────────────────────
+# Nifty 30-min ORB  +  Greeks-gated OPTION BUYING bot
+# Every number here is a starting point, not a recommendation.
+# Backtest and paper-trade before changing mode to "live".
+# ─────────────────────────────────────────────────────────────
+
+mode: paper            # paper = real market data, simulated fills | live = real orders
+broker: kite           # data/execution adapter (Zerodha Kite Connect)
+
+underlying:
+  strike_step: 50
+  lot_size: 65         # FALLBACK only (live mode reads it from the Kite instrument list). VERIFY current NSE lot size.
+  expiry_weekday: 1    # Mon=0 … Nifty weeklies expire Tuesday. Used by the backtester only; live reads real expiries.
+
+session:
+  market_open: "09:15"
+  orb_end: "09:45"            # first 30-min candle = 09:15–09:45
+  no_new_entries_after: "13:30"   # afternoon entries fight theta with little time left
+  square_off: "15:15"         # flat before broker MIS auto-square-off
+
+orb:
+  confirm_tf_minutes: 5       # breakout must CLOSE beyond the level on this timeframe (5 or 15)
+  breakout_buffer_pts: 5      # close must clear the level by this much
+  min_range_pct: 0.25         # skip tiny ranges (fake breakouts) — % of spot
+  max_range_pct: 0.90         # skip huge ranges (move already done, stop too wide)
+  max_gap_pct: 1.0            # skip days that gapped more than this vs prev close
+  max_entry_extension_pct: 0.30   # don't chase: skip if breakout close is this far beyond the level
+  stop_mode: mid              # mid = range midpoint | opposite = other side of range
+  target_r: 2.0               # index target = breakout level + 2 × (level-to-stop distance). Mid stop → 1 full range
+  breakeven_after_r: 1.0      # once index moves 1R in favour, stop → entry; then trail 1R behind best price
+  max_trades_per_day: 1       # set to 2 if you enable allow_reversal
+  allow_reversal: false       # if true and first trade stops out, allow ONE opposite-side trade
+
+greeks:
+  risk_free_rate: 0.065
+  dividend_yield: 0.012
+  min_dte_days: 2             # never buy expiry-day or day-before contracts; roll to next weekly
+  strikes_each_side: 6        # how many strikes around ATM to evaluate
+  delta_min: 0.45             # ATM to moderately ITM: less time value to bleed, moves with the index
+  delta_max: 0.72
+  delta_target: 0.58
+  max_hold_theta_pct: 8.0     # reject if theta over the expected hold eats > 8% of premium
+  vix_min: 10.0               # too quiet → breakouts fizzle
+  vix_max: 24.0               # too hot → premiums inflated, IV-crush risk
+  max_iv_over_vix: 3.0        # reject option whose IV is > VIX + 3 vol pts (overpriced)
+  max_iv_rank: 80             # reject if today's ATM IV is in the top 20% of last N days
+  iv_rank_lookback: 60
+  iv_rank_min_history: 20     # IV-rank gate switches on after this many logged days
+  expected_hold_hours: 2.0    # time for a winner to reach target (theta cost in the edge calc)
+  stop_hold_hours: 1.0        # time for a loser to hit the stop
+  spot_vol_beta: 0.8          # IV change (vol pts) per 1% index move, opposite sign: rally → IV falls, selloff → IV rises
+  iv_drift_pts: 0.2           # extra IV drift down while held
+  min_edge_ratio: 1.0         # option gain at target ÷ option loss at stop after theta + IV change. ≥1 = at least 1:1 in premium
+  max_spread_pct: 1.5         # live only: reject if bid-ask spread > 1.5% of mid
+
+risk:
+  capital: 200000
+  risk_per_trade: 3000        # ₹ you accept losing on one trade (sizes the lots). 1 lot often needs ~₹2–3.5k
+  max_lots: 4
+  premium_stop_pct: 35        # hard stop on the option itself, independent of index stop
+  daily_loss_limit: 4000      # stop trading for the day after this realised loss
+
+execution:
+  limit_buffer_pct: 0.5       # live: limit price = LTP ± 0.5%
+  fill_timeout_sec: 8
+  poll_seconds: 5
+
+costs:                        # VERIFY current rates with your broker's contract note
+  brokerage_per_order: 20
+  stt_sell_pct: 0.15          # STT on option sell premium (rate has changed in recent budgets — check)
+  exchange_txn_pct: 0.03503
+  gst_pct: 18
+  stamp_buy_pct: 0.003
+  sebi_per_crore: 10
+  slippage_pct: 0.5           # paper/backtest fill penalty each side
+
+files:
+  event_days: event_days.txt  # YYYY-MM-DD per line: RBI policy, Budget, Fed, results… bot sits out
+  iv_history: data/iv_history.csv
+  trade_journal: data/trades.csv
+  log: data/bot.log
+  state: data/state.json

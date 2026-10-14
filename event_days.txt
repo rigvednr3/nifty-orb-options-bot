@@ -1,0 +1,5 @@
+# One date per line (YYYY-MM-DD). The bot sits out these days.
+# Add: RBI policy announcements, Union Budget, US Fed decision days (the morning after in IST),
+# general/state election results, major index-heavyweight results days you want to avoid.
+# Example:
+# 2026-12-05
